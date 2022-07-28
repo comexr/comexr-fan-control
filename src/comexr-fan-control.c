@@ -99,6 +99,11 @@ static int calculate_fan_rpms(int raw_rpm_high, int raw_rpm_low);
 static int check_proc_instances(const char* proc_name);
 static void signal_term(__sighandler_t handler);
 
+char *path;
+int count = 0;
+int tabletemp[50];
+int tableduty[50];
+
 struct {
     volatile int exit;
     volatile int cpu_temp;
@@ -186,6 +191,7 @@ DO NOT MANIPULATE OR QUERY EC I/O PORTS WHILE THIS PROGRAM IS RUNNING.\n\
             return main_test_fan(val);
         }
     }
+    getFanTable();
     return EXIT_SUCCESS;
 }
 
@@ -326,12 +332,16 @@ static void ec_on_sigterm(int signum) {
         share_info->exit = 1;
 }
 
-static int ec_auto_duty_adjust(void) {
+static int ec_auto_duty_adjust(void) {    
     int temp = MAX(share_info->cpu_temp, share_info->gpu_temp);
     // Fan Table
     // EC doesn't report above 95 degrees C
-    if (temp >= 95)
-    	return 100;
+    for (int i = 0; i < count; i++) {
+    if (temp >= tabletemp[i])
+    	return tableduty[i];
+    }
+    
+    /*
     if (temp == 94)
     	return 95;
     if (temp == 93)
@@ -412,7 +422,40 @@ static int ec_auto_duty_adjust(void) {
     	return 30;
     	
     // catch
-    return 20;
+    return 30;
+    */
+}
+
+getFanTable() {
+    FILE *curve = fopen("/etc/comexr-fan-control/fan-curve", "r");
+    
+    if (!curve)
+    {
+        perror(path);
+        return EXIT_FAILURE;
+    }
+
+    while (fscanf(curve, "%d,%d", &tabletemp[count], &tableduty[count]) != EOF)
+    {
+      count++;
+    }
+    
+    tabletemp[count] = '\0';
+    tableduty[count] = '\0';
+    
+    for (count = 0; tabletemp[count] != '\0'; count++) {
+      printf("Temp: %d\n", tabletemp[count]);
+      printf("Duty: %d\n", tableduty[count]);
+      printf("\n");
+    }
+    
+    if (fclose(curve))
+    {
+        return EXIT_FAILURE;
+        perror(path);
+    }
+    
+    return 0;
 }
 
 static int ec_query_cpu_temp(void) {
