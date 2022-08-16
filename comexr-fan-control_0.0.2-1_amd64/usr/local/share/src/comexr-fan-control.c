@@ -99,6 +99,11 @@ static int calculate_fan_rpms(int raw_rpm_high, int raw_rpm_low);
 static int check_proc_instances(const char* proc_name);
 static void signal_term(__sighandler_t handler);
 
+char *path;
+int count = 0;
+int tabletemp[50];
+int tableduty[50];
+
 struct {
     volatile int exit;
     volatile int cpu_temp;
@@ -155,6 +160,18 @@ int main(int argc, char* argv[]) {
         if (argv[1][0] == '-') {
             printf(
                     "\n\
+Usage: comexr-fan-control [fan-duty-percentage]\n\
+\n\
+Dump/Control fan duty on Clevo laptops. Display indicator by default.\n\
+\n\
+Arguments:\n\
+  [fan-duty-percentage]\t\tTarget fan duty in percentage, from 40 to 100\n\
+  -?\t\t\t\tDisplay this help and exit\n\
+\n\
+Note any fan duty change should take 1-2 seconds to come into effect - you\n\
+can verify by the fan speed displayed on indicator icon and also louder fan\n\
+noise.\n\
+\n\
 This program would always attempt to load kernel\n\
 module 'ec_sys', in order to query EC information from\n\
 '/sys/kernel/debug/ec/ec0/io' instead of polling EC ports for readings,\n\
@@ -174,6 +191,7 @@ DO NOT MANIPULATE OR QUERY EC I/O PORTS WHILE THIS PROGRAM IS RUNNING.\n\
             return main_test_fan(val);
         }
     }
+    getFanTable();
     return EXIT_SUCCESS;
 }
 
@@ -314,12 +332,17 @@ static void ec_on_sigterm(int signum) {
         share_info->exit = 1;
 }
 
-static int ec_auto_duty_adjust(void) {
+static int ec_auto_duty_adjust(void) {    
     int temp = MAX(share_info->cpu_temp, share_info->gpu_temp);
     // Fan Table
     // EC doesn't report above 95 degrees C
-    if (temp >= 95)
-    	return 100;
+    for (int i = 0; i < count; i++) {
+    if (temp >= tabletemp[i])
+    	return tableduty[i];
+    } else
+    	return tableduty[count];
+    
+    /*
     if (temp == 94)
     	return 95;
     if (temp == 93)
@@ -367,40 +390,73 @@ static int ec_auto_duty_adjust(void) {
     if (temp == 72)
     	return 40;
     if (temp == 71)
-    	return 37;
+    	return 39;
     if (temp == 70)
-    	return 33;
+    	return 37;
     if (temp == 69)
-    	return 30;
+    	return 36;
     if (temp == 68)
-    	return 28;
+    	return 35;
     if (temp == 67)
-    	return 26;
+    	return 35;
     if (temp == 66)
-    	return 25;
+    	return 34;
     if (temp == 65)
-    	return 24;
+    	return 34;
     if (temp == 64)
-    	return 23;
+    	return 33;
     if (temp == 63)
-    	return 23;
+    	return 33;
     if (temp == 62)
-    	return 22;
+    	return 32;
     if (temp == 61)
-    	return 22;
+    	return 32;
     if (temp == 60)
-    	return 22;
+    	return 32;
     if (temp == 59)
-    	return 22;
+    	return 31;
     if (temp == 58)
-    	return 21;
+    	return 31;
     if (temp == 57)
-    	return 21;
+    	return 31;
     if (temp <= 56)
-    	return 20;
+    	return 30;
     	
     // catch
-    return 20;
+    return 30;
+    */
+}
+
+getFanTable() {
+    FILE *curve = fopen("/etc/comexr-fan-control/fan-curve", "r");
+    
+    if (!curve)
+    {
+        perror(path);
+        return EXIT_FAILURE;
+    }
+
+    while (fscanf(curve, "%d,%d", &tabletemp[count], &tableduty[count]) != EOF)
+    {
+      count++;
+    }
+    
+    tabletemp[count] = '\0';
+    tableduty[count] = '\0';
+    
+    for (count = 0; tabletemp[count] != '\0'; count++) {
+      printf("Temp: %d\n", tabletemp[count]);
+      printf("Duty: %d\n", tableduty[count]);
+      printf("\n");
+    }
+    
+    if (fclose(curve))
+    {
+        return EXIT_FAILURE;
+        perror(path);
+    }
+    
+    return 0;
 }
 
 static int ec_query_cpu_temp(void) {
