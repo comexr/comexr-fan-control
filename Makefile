@@ -11,7 +11,7 @@ SRCDIR := src
 SRC = comexr-fan-control.c
 OBJ = $(patsubst %.c,$(OBJDIR)/%.o,$(SRC)) 
 
-TARGET = ./build/usr/local/bin/comexr-fan-control
+TARGET = bin/comexr-fan-control
 
 all: $(TARGET)
 
